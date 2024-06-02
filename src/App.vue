@@ -1,5 +1,5 @@
 <template>
-  <Editor :content="state.content" :path="state.path" @save="handleSave" />
+  <Editor />
 </template>
 
 <script setup>
@@ -12,32 +12,32 @@ const state = reactive({
   path: "",
 })
 
-function handleSave(path, content) {
-  if ((path && content !== state.content) || state.path !== path) {
-    state.content = content
-    writeMarkdownFile(path, content)
-    ElMessage.success({
-      message: '保存成功',
-      type: 'success'
-    });
+// function handleSave(path, content) {
+//   if ((path && content !== state.content) || state.path !== path) {
+//     state.content = content
+//     writeMarkdownFile(path, content)
+//     ElMessage.success({
+//       message: '保存成功',
+//       type: 'success'
+//     });
+//
+//     if (state.path === '') {
+//       state.path = path
+//     }
+//   }
+// }
 
-    if (state.path === '') {
-      state.path = path
-    }
-  }
-}
-
-utools.onPluginEnter(({code, type, payload}) => {
-  console.log('用户进入插件', code, type, payload)
-
-  if (type === 'files') {
-    state.path = payload[0].path;
-    state.content = readMarkdownFile(state.path)
-  } else {
-    state.path = ""
-    state.content = ""
-  }
-})
+// utools.onPluginEnter(({code, type, payload}) => {
+//   console.log('用户进入插件', code, type, payload)
+//
+//   if (type === 'files') {
+//     state.path = payload[0].path;
+//     state.content = readMarkdownFile(state.path)
+//   } else {
+//     state.path = ""
+//     state.content = ""
+//   }
+// })
 </script>
 
 <style>

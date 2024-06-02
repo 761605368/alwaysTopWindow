@@ -1,162 +1,210 @@
 <template>
-  <div class="container">
-    <el-divider content-position="center" class="divider-content">
-      <template v-if="state.path">
-        <el-link type="primary" class="file-open" @click="handleOpenFile">{{state.path}}</el-link>
-      </template>
-      <template v-else>临时文件</template>
-    </el-divider>
-    <el-row :gutter="30">
-      <el-col :span="12">
-        <el-input type="textarea" placeholder="markdown..." resize="none" :rows="19" :autofocus="true" v-model="state.content"></el-input>
-      </el-col>
-      <el-col :span="12">
-        <div class="rendered markdown-body" v-html="renderedContent"></div>
-      </el-col>
-    </el-row>
-
-    <el-row justify="center" :gutter="30">
-      <el-col :span="6">
-        <el-button class="save-button" @click="handleSave">{{saveText}}</el-button>
-      </el-col>
-      <el-col :span="6">
-        <el-button class="save-button" @click="handleSaveAs">{{saveAsText}}</el-button>
-      </el-col>
-    </el-row>
-  </div>
+    <div class="container">
+        <div style="height: 40px">
+            置顶窗口靠前:<el-switch v-model="data.topWindow"/>
+            显示可见:<el-switch v-model="data.isVisible"/>
+            <el-button style="margin-left: 20px;" plain @click="init()">
+                刷新
+            </el-button>
+            <el-button style="margin-left: 20px;" plain @click="dialogVisible = true">
+                取消所有置顶
+            </el-button>
+            <div>
+                <el-dialog v-model="dialogVisible" title="Tips" width="300px" draggable>
+                    <span>是否取消所有置顶</span>
+                    <template #footer>
+                        <div class="dialog-footer">
+                            <el-button @click="dialogVisible = false">Cancel</el-button>
+                            <el-button type="primary" @click="closeAllTopWindows">
+                                Confirm
+                            </el-button>
+                        </div>
+                    </template>
+                </el-dialog>
+            </div>
+        </div>
+        <div class="item" v-for="item in windowsList" >
+            <el-card>
+                置顶:<el-switch @change="changeWindowTop(item)" v-model="item.isTopMost"/>
+                <div style="margin-top: 2px" v-show="data.isVisible">可见:<el-switch @change="changeWindowVisible(item)" v-model="item.isVisible"/></div>
+                <img
+                        :src="item.icon ? item.icon : './default.png'"
+                        style="width: 100%"
+                        :title="item.title"
+                />
+            </el-card>
+        </div>
+    </div>
 </template>
 
 <script setup>
-import { defineProps, defineEmits, reactive, watch, computed } from 'vue'
-import marked from 'marked'
-import "github-markdown-css/github-markdown.css"
-import MyRenderer from "./Renderer"
+    import {defineProps, defineEmits, reactive, ref, watch, computed, onMounted, onUnmounted} from 'vue'
 
-import hljs from 'highlight.js'
-import "highlight.js/scss/default.scss"
+    import keyboard from "keyboardjs"
 
-import keyboard from "keyboardjs"
+    // 窗口数据
+    let windowsList = reactive(window.winman_get_window_list());
 
-marked.setOptions({
-  renderer: new MyRenderer(),
-  highlight: function(code, lang) {
-    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-    return hljs.highlight(code, { language }).value;
-  },
-  pedantic: false,
-  gfm: true,
-  breaks: false,
-  sanitize: false,
-  smartLists: true,
-  smartypants: false,
-  xhtml: false
-});
+    // 显示取消置顶的对话框
+    let dialogVisible = ref(false);
 
-const props = defineProps({
-  content: String,
-  path: String,
-})
+    // 控制显示顺序的数据
+    const data = reactive({
+        topWindow: true, // 置顶窗口在前面
+        isVisible: false, //不显示可见性
 
-const state = reactive({ content: props.content })
-
-watch(() => props.content, () => {
-  state.content = props.content
-})
-
-watch(() => props.path, () => {
-  state.path = props.path
-
-  if (props.path) {
-    console.log('basic path', props.path, getFileDirectory(props.path));
-    marked.setOptions({
-      baseUrl: getFileDirectory(props.path)
     })
-  } else {
-    console.log("props path is empty");
-    marked.setOptions({
-      baseUrl: null
+
+    watch(() => data.topWindow, () => {
+        console.log("置顶窗口在前面", data)
+        if (data.topWindow) {
+            windowsList.sort((a, b) => -(a.isTopMost ? 1 : a.isTopMost === b.isTopMost ? 1 : -1));
+        } else {
+            windowsList.sort((a, b) => a.id > b.id ? 1 : a.id === b.id ? 0 : -1);
+        }
     })
-  }
-}, {
-  immediate: true
-})
 
-const renderedContent = computed(() => {
-  return marked(state.content)
-})
+    // 取消所有置顶窗口
+    function closeAllTopWindows() {
+        windowsList.forEach(win => {
+            changeWindowTop(win);
+            win.isTopMost = false;
+        })
+        dialogVisible.value = false;
+    }
+
+    // 获取图标
+    function cache_window_ico(win) {
+        win.icon = ""
+        if (!win.path || win.path === "程序路径获取失败，需要管理员权限") return win
+        let app_path = window.get_mac_app_path(win.path)
+        if (!app_path) return win
+        let app_name = window.get_app_base_name(app_path)
+        let app_icon = utools.dbStorage.getItem(app_name)
+        if (!app_icon) {
+            app_icon = utools.getFileIcon(app_path)
+            utools.dbStorage.setItem(app_name, app_icon)
+        }
+        win.app = app_name
+        win.icon = app_icon
+
+        return win;
+    }
+
+    // 获取状态：是否置顶，透明度
+    function getStatus(win) {
+        let status = window.winman_get_window_status(win);
+        if (!status) return
+        status = JSON.parse(status);
+        console.log(status)
+        win.isVisible = !!status.isVisible; //可见
+        win.isTopMost = !!status.IsTopMost; //置顶
+        win.isEnable = status.isEnable; //禁用
+        win.opacity = status.opacity; //透明度0-255
+        return win;
+    }
+
+    // 加载的时候获取图标
+    onMounted(async () => {
+        windowsList.forEach(win => {
+            cache_window_ico(win);
+            getStatus(win);
+        })
+        console.log(windowsList);
+    })
+
+    function init() {
+        console.log("init")
+        windowsList = reactive(window.winman_get_window_list());
+        windowsList.forEach(win => {
+            cache_window_ico(win);
+            getStatus(win);
+        })
+        console.log(windowsList);
+    }
+
+    function changeWindowVisible(win) {
+
+        let cmd = win.isVisible ? 'show' : 'hide';
+        window.winman_set_window_status(win, cmd);
+    }
+
+    function changeWindowTop(win) {
+        if (win.isTopMost) {
+            // 先隐藏
+            changeWindowVisible({...win, isVisible: false})
+            // 再显示
+            changeWindowVisible({...win, isVisible: true})
+        }
+
+        let cmd = win.isTopMost ? "top" : "untop";
+        let result =  window.winman_set_window_status(win, cmd)
+        console.log("设置窗口状态", cmd, result)
+    }
+
+    // watch(() => windows, () => {
+    //     console.log("监听到windows数据发生变化，重新获取窗口数据")
+    //     windows.valueOf = window.listAllWindows();
+    // }, {deep: true, immediate: false})
+
+    // const props = defineProps({
+    //   windows: [{id: 1}],
+    // })
+
+    // const state = reactive({ content: props.content })
+    //
+    // watch(() => props.content, () => {
+    //   state.content = props.content
+    // })
+    //
+    // watch(() => props.path, () => {
+    //   state.path = props.path
+    //
+    //   if (props.path) {
+    //     console.log('basic path', props.path, getFileDirectory(props.path));
+    //     marked.setOptions({
+    //       baseUrl: getFileDirectory(props.path)
+    //     })
+    //   } else {
+    //     console.log("props path is empty");
+    //     marked.setOptions({
+    //       baseUrl: null
+    //     })
+    //   }
+    // }, {
+    //   immediate: true
+    // })
 
 
-// save and save as
-const emits = defineEmits(['save'])
+    // save and save as
+    // const emits = defineEmits(['save'])
 
-const saveText = "保存（ " + (utools.isMacOs() ? "⌘" : 'Ctrl') + " + S ）"
-const saveAsText = "另存为（ " + (utools.isMacOs() ? "⌘" : 'Ctrl') + " + Shift + S ）"
 
-function handleSave() {
-  if (props.path === "") {
-    handleSaveAs()
-  } else {
-    emits('save', props.path, state.content);
-  }
-}
+    // function handleSave() {
+    //     if (props.path === "") {
+    //         handleSaveAs()
+    //     } else {
+    //         emits('save', props.path, state.content);
+    //     }
+    // }
 
-function handleSaveAs() {
-  const savePath = utools.showSaveDialog({
-    title: '保存位置',
-    defaultPath: "临时文件.md",
-    buttonLabel: '保存'
-  })
-  if (savePath) {
-    emits('save', savePath, state.content);
-  }
-}
-
-function handleOpenFile() {
-  utools.shellShowItemInFolder(state.path);
-}
-
-// keyboard
-keyboard.bind("mod > s", () => {
-  handleSave()
-});
-keyboard.bind("mod + shift > s", () => {
-  handleSaveAs()
-});
+    // keyboard
+    // keyboard.bind("mod > s", () => {
+    //     handleSave()
+    // });
+    // keyboard.bind("mod + shift > s", () => {
+    //     handleSaveAs()
+    // });
 
 </script>
 
 <style scoped>
-@media (prefers-color-scheme: dark) {
-  .divider-content {
-    background: transparent;
-    color: #fff;
-  }
-}
-.el-row {
-  margin-bottom: 20px;
-}
-.container {
-  width: 90%;
-  margin: 20px auto;
-}
-.rendered {
-  /*height: calc(100% - 20px);*/
+    .item {
+        float: left;
+        flex: auto;
+        width: 120px;
 
-  height: calc(407px - 20px);
+    }
 
-  word-break: break-all;
 
-  box-shadow: 0 2px 4px rgba(0,0,0,0.12),0 0 6px rgba(0,0,0,0.04);
-
-  border: 2px solid #eee;
-  padding: 10px 20px;
-  background: #fff;
-
-  overflow-y: auto;
-}
-
-.save-button {
-  margin: 0 auto;
-  display: block;
-}
 </style>

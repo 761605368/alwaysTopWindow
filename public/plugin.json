@@ -6,25 +6,12 @@
   "development": {
     "main": "http://127.0.0.1:3000"
   },
+  "unpack": "WindowManager.*",
   "features": [
     {
       "code": "main",
-      "explain": "一个方便的 markdown 编辑工具",
-      "cmds":["markdown 编辑器"]
-    },
-    {
-      "code": "copy",
-      "explain": "复制文件预览及编辑",
-      "cmds": [
-        {
-          "type": "files",
-          "label": "markdown 文件预览",
-          "fileType": "file",
-          "match": "/\\.md$/i",
-          "minLength": 1,
-          "maxLength": 1
-        }
-      ]
+      "explain": "窗口置顶,有时不起作用",
+      "cmds":["窗口置顶","top", "window", "windows", "windowsTop", "窗口", "置顶"]
     }
   ]
 }
